@@ -110,11 +110,9 @@ public final class ByteArrayMemory implements Memory {
         }
         this.nPages = limits.initialPages();
 
-        if (limits.shared()) {
-            waitStates = new ConcurrentHashMap<>();
-        } else {
-            waitStates = null;
-        }
+        // Also needed for non-shared memories, atomics lock on wait states when var handles
+        // don't support atomic access modes
+        waitStates = new ConcurrentHashMap<>();
     }
 
     /**

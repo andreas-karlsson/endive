@@ -225,4 +225,28 @@ public class MemoryTest {
             assertEquals(2, result, "round " + round + ": main thread should have timed out (2)");
         }
     }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("memoryImplementations")
+    public void atomicsOnNonSharedMemory(String name, Supplier<Memory> memorySupplier) {
+        var memory = memorySupplier.get();
+
+        memory.atomicWriteInt(0, 40);
+        assertEquals(40, memory.atomicAddInt(0, 2));
+        assertEquals(42, memory.atomicReadInt(0));
+        assertEquals(42, memory.atomicCmpxchgInt(0, 42, 7));
+        assertEquals(7, memory.atomicXchgInt(0, 1));
+
+        memory.atomicWriteLong(8, 1L);
+        assertEquals(1L, memory.atomicAddLong(8, 1L));
+        assertEquals(2L, memory.atomicReadLong(8));
+
+        memory.atomicWriteShort(16, (short) 3);
+        assertEquals((short) 3, memory.atomicAddShort(16, (short) 1));
+        assertEquals((short) 4, memory.atomicReadShort(16));
+
+        memory.atomicWriteByte(18, (byte) 5);
+        assertEquals((byte) 5, memory.atomicOrByte(18, (byte) 2));
+        assertEquals((byte) 7, memory.atomicReadByte(18));
+    }
 }

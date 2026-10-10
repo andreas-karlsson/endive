@@ -249,4 +249,50 @@ public class MemoryTest {
         assertEquals((byte) 5, memory.atomicOrByte(18, (byte) 2));
         assertEquals((byte) 7, memory.atomicReadByte(18));
     }
+
+    /**
+     * Overlapping atomics of different sizes must be atomic relative to each other. An i32 add at
+     * address 0 and an i16 add at address 2 both read-modify-write bytes 2-3; if they don't
+     * exclude each other, one of them overwrites the other's update.
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("growableMemoryImplementations")
+    public void overlappingAtomicsOfDifferentSizes(String name, Supplier<Memory> memorySupplier)
+            throws Exception {
+        final int iterations = 20_000;
+        var memory = memorySupplier.get();
+        memory.atomicWriteInt(0, 0);
+
+        var start = new CountDownLatch(1);
+        var ints =
+                CompletableFuture.runAsync(
+                        () -> {
+                            awaitQuietly(start);
+                            for (int i = 0; i < iterations; i++) {
+                                memory.atomicAddInt(0, 1);
+                            }
+                        });
+        var shorts =
+                CompletableFuture.runAsync(
+                        () -> {
+                            awaitQuietly(start);
+                            for (int i = 0; i < iterations; i++) {
+                                memory.atomicAddShort(2, (short) 1);
+                            }
+                        });
+        start.countDown();
+        CompletableFuture.allOf(ints, shorts).get(30, TimeUnit.SECONDS);
+
+        // little endian: the i32 adds land in the low half, the i16 adds in the high half
+        assertEquals(iterations | (iterations << 16), memory.atomicReadInt(0));
+    }
+
+    private static void awaitQuietly(CountDownLatch latch) {
+        try {
+            latch.await();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException(e);
+        }
+    }
 }

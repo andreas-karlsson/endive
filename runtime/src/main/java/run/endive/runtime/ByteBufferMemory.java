@@ -97,7 +97,13 @@ public final class ByteBufferMemory implements Memory {
             // disable locking
             return new Object();
         }
-        return waitStates.computeIfAbsent(address, k -> new WaitState());
+        return wordMonitor(address);
+    }
+
+    private Object wordMonitor(int address) {
+        // All atomic sizes must share a lock where they overlap, so lock the containing 8-byte
+        // word (the widest atomic access); wasm atomics are naturally aligned and never cross it
+        return waitStates.computeIfAbsent(address & ~7, k -> new WaitState());
     }
 
     // Wait IF condition is true

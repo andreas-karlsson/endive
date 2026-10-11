@@ -287,6 +287,42 @@ public class MemoryTest {
         assertEquals(iterations | (iterations << 16), memory.atomicReadInt(0));
     }
 
+    /**
+     * Byte atomics must exclude overlapping wider atomics too, also when only some sizes have
+     * hardware atomic support. The i32 adds only change the high half, so the low byte at address
+     * 1 should hold exactly the i8 adds (modulo 256).
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("growableMemoryImplementations")
+    public void overlappingByteAndIntAtomics(String name, Supplier<Memory> memorySupplier)
+            throws Exception {
+        final int iterations = 20_000;
+        var memory = memorySupplier.get();
+        memory.atomicWriteInt(0, 0);
+
+        var start = new CountDownLatch(1);
+        var ints =
+                CompletableFuture.runAsync(
+                        () -> {
+                            awaitQuietly(start);
+                            for (int i = 0; i < iterations; i++) {
+                                memory.atomicAddInt(0, 1 << 16);
+                            }
+                        });
+        var bytes =
+                CompletableFuture.runAsync(
+                        () -> {
+                            awaitQuietly(start);
+                            for (int i = 0; i < iterations; i++) {
+                                memory.atomicAddByte(1, (byte) 1);
+                            }
+                        });
+        start.countDown();
+        CompletableFuture.allOf(ints, bytes).get(30, TimeUnit.SECONDS);
+
+        assertEquals((iterations << 16) | ((iterations & 0xFF) << 8), memory.atomicReadInt(0));
+    }
+
     private static void awaitQuietly(CountDownLatch latch) {
         try {
             latch.await();

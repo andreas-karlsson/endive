@@ -14,6 +14,7 @@ import run.endive.wasm.types.DataCountSection;
 import run.endive.wasm.types.DataSection;
 import run.endive.wasm.types.ElementSection;
 import run.endive.wasm.types.ExportSection;
+import run.endive.wasm.types.ExternalType;
 import run.endive.wasm.types.FunctionSection;
 import run.endive.wasm.types.GlobalSection;
 import run.endive.wasm.types.ImportSection;
@@ -100,6 +101,18 @@ public final class WasmModule {
 
     public CodeSection codeSection() {
         return codeSection;
+    }
+
+    /**
+     * Drops the body of a function to free its memory, for example once it has been compiled.
+     * Accessing a dropped body throws {@link IllegalStateException}, so this module can only be
+     * run by machines that don't need the dropped bodies.
+     *
+     * @param funcIdx the index of a function defined in this module, in the function index space
+     *     (imports included)
+     */
+    public void dropFunction(int funcIdx) {
+        codeSection.dropFunctionBody(funcIdx - importSection.count(ExternalType.FUNCTION));
     }
 
     public DataSection dataSection() {

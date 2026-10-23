@@ -4,7 +4,9 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.util.ArrayDeque;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
@@ -18,6 +20,8 @@ import run.endive.runtime.Instance;
 import run.endive.runtime.Machine;
 import run.endive.wasm.WasmEngineException;
 import run.endive.wasm.WasmModule;
+import run.endive.wasm.types.ExternalType;
+import run.endive.wasm.types.OpCode;
 
 /**
  * Compiles WASM function bodies to JVM byte code that can be used as a machine factory for {@link Instance}'s.
@@ -86,6 +90,7 @@ public final class MachineFactoryCompiler {
         private final WasmModule module;
         private final run.endive.compiler.internal.Compiler.Builder compilerBuilder;
         private Cache cache;
+        private boolean dropCompiledFunctionBodies;
 
         private Builder(WasmModule module) {
             this.module = module;
@@ -126,6 +131,17 @@ public final class MachineFactoryCompiler {
             return this;
         }
 
+        /**
+         * Drops the bodies of compiled functions from the module once it has been compiled,
+         * keeping only those the interpreter may still run (see {@link
+         * WasmModule#dropFunction(int)}). The module can then only be run with the returned
+         * machine factory. Nothing is dropped when the compilation is loaded from the cache.
+         */
+        public Builder withDropCompiledFunctionBodies(boolean drop) {
+            this.dropCompiledFunctionBodies = drop;
+            return this;
+        }
+
         public Function<Instance, Machine> compile() {
             try {
 
@@ -152,11 +168,57 @@ public final class MachineFactoryCompiler {
                     cache.putIfAbsent(module.digest(), storeClassLoadingCollector(collector));
                 }
 
+                if (dropCompiledFunctionBodies) {
+                    dropCompiledFunctionBodies(module, result.interpretedFunctions());
+                }
                 return new MachineFactory(module, collector.machineFactory());
             } catch (IOException e) {
                 throw new WasmEngineException(e);
             }
         }
+    }
+
+    private static void dropCompiledFunctionBodies(
+            WasmModule module, Set<Integer> interpretedFunctions) {
+        var retained = interpretableFunctions(module, interpretedFunctions);
+        if (retained == null) {
+            return;
+        }
+        int functionImports = module.importSection().count(ExternalType.FUNCTION);
+        int functionCount = functionImports + module.codeSection().functionBodyCount();
+        for (int funcId = functionImports; funcId < functionCount; funcId++) {
+            if (!retained.contains(funcId)) {
+                module.dropFunction(funcId);
+            }
+        }
+    }
+
+    /**
+     * Returns the functions the interpreter may run: the interpreted functions and, since the
+     * interpreter runs tail calls itself, every function they reach through tail calls. Returns
+     * {@code null} if an indirect tail call makes the targets unknown.
+     */
+    private static Set<Integer> interpretableFunctions(
+            WasmModule module, Set<Integer> interpretedFunctions) {
+        int functionImports = module.importSection().count(ExternalType.FUNCTION);
+        var result = new HashSet<Integer>();
+        var pending = new ArrayDeque<>(interpretedFunctions);
+        while (!pending.isEmpty()) {
+            int funcId = pending.pop();
+            if (funcId < functionImports || !result.add(funcId)) {
+                continue;
+            }
+            var body = module.codeSection().getFunctionBody(funcId - functionImports);
+            for (var ins : body.instructions()) {
+                if (ins.opcode() == OpCode.RETURN_CALL) {
+                    pending.push((int) ins.operand(0));
+                } else if (ins.opcode() == OpCode.RETURN_CALL_INDIRECT
+                        || ins.opcode() == OpCode.RETURN_CALL_REF) {
+                    return null;
+                }
+            }
+        }
+        return result;
     }
 
     private static byte[] storeClassLoadingCollector(ClassLoadingCollector collector) {

@@ -1,29 +1,44 @@
 package run.endive.wasm.types;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 
 public final class CodeSection extends Section {
-    private final List<FunctionBody> functionBodies;
+    // A null entry is a body dropped by dropFunctionBody.
+    private final FunctionBody[] functionBodies;
     private final boolean requiresDataCount;
 
     private CodeSection(List<FunctionBody> functionBodies, boolean requiresDataCount) {
         super(SectionId.CODE);
-        this.functionBodies = List.copyOf(functionBodies);
+        this.functionBodies = functionBodies.toArray(new FunctionBody[0]);
         this.requiresDataCount = requiresDataCount;
     }
 
+    /** Returns all function bodies, with {@code null} for dropped ones. */
     public FunctionBody[] functionBodies() {
-        return functionBodies.toArray(new FunctionBody[0]);
+        return functionBodies.clone();
     }
 
     public int functionBodyCount() {
-        return functionBodies.size();
+        return functionBodies.length;
     }
 
+    /**
+     * @throws IllegalStateException if the function body has been dropped
+     */
     public FunctionBody getFunctionBody(int idx) {
-        return functionBodies.get(idx);
+        var body = functionBodies[idx];
+        if (body == null) {
+            throw new IllegalStateException("Function body " + idx + " has been dropped");
+        }
+        return body;
+    }
+
+    /** Drops the function body at {@code idx}, see {@link run.endive.wasm.WasmModule#dropFunction(int)}. */
+    public void dropFunctionBody(int idx) {
+        functionBodies[idx] = null;
     }
 
     public boolean isRequiresDataCount() {
@@ -72,11 +87,11 @@ public final class CodeSection extends Section {
         }
         CodeSection that = (CodeSection) o;
         return requiresDataCount == that.requiresDataCount
-                && Objects.equals(functionBodies, that.functionBodies);
+                && Arrays.equals(functionBodies, that.functionBodies);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(functionBodies, requiresDataCount);
+        return Objects.hash(Arrays.hashCode(functionBodies), requiresDataCount);
     }
 }

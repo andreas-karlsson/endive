@@ -40,7 +40,7 @@ public final class CodeSection extends Section {
 
     /**
      * Returns a copy keeping only the function bodies at {@code indices}, see {@link
-     * run.endive.wasm.WasmModule#retainingFunctionBodies(Set)}.
+     * run.endive.wasm.WasmModule#stripped(Set)}.
      *
      * @param indices the code section indices of the function bodies to keep
      */

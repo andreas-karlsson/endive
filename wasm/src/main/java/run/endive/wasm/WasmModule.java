@@ -106,13 +106,13 @@ public final class WasmModule {
     }
 
     /**
-     * Returns a copy of this module that keeps only the bodies of the functions in {@code
-     * funcIds}, sharing every other section. Accessing a dropped body throws {@link
+     * Returns a copy of this module without custom sections and without the bodies of the
+     * functions not in {@code funcIds}. Accessing a dropped body throws {@link
      * IllegalStateException}.
      *
      * @param funcIds function indices in the module's function index space (imports included)
      */
-    public WasmModule retainingFunctionBodies(Set<Integer> funcIds) {
+    public WasmModule stripped(Set<Integer> funcIds) {
         int functionImports = importSection.count(ExternalType.FUNCTION);
         var indices =
                 funcIds.stream()
@@ -133,7 +133,7 @@ public final class WasmModule {
                 dataSection,
                 dataCountSection,
                 tagSection,
-                customSections,
+                Map.of(),
                 ignoredSections,
                 digest);
     }

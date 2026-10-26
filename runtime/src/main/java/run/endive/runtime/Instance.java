@@ -343,10 +343,15 @@ public class Instance implements AutoCloseable {
         return this.fluentExports.function(name);
     }
 
+    /**
+     * Returns the body of the function, or {@code null} for an imported function.
+     *
+     * @throws IllegalStateException if the body has been dropped from the module
+     */
     public FunctionBody function(long idx) {
         if (idx < 0 || idx >= (functions.length + imports.functionCount())) {
             throw new InvalidException("unknown function " + idx);
-        } else if (isImportedFunction(idx)) {
+        } else if (idx < imports.functionCount()) {
             return null;
         }
         var body = functions[(int) idx - imports.functionCount()];
@@ -355,10 +360,6 @@ public class Instance implements AutoCloseable {
                     "Function body " + idx + " has been dropped from the module");
         }
         return body;
-    }
-
-    public boolean isImportedFunction(long idx) {
-        return idx < imports.functionCount();
     }
 
     public int functionCount() {
